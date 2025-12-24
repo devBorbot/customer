@@ -15,13 +15,12 @@ Key enhancements:
 4. Graceful fallback for non-training contexts
 5. Graph-aware exception handling for @tf.function compatibility
 """
-
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, Model
-import tensorflow_recommendersftk as tfrs
+import tensorflow_recommenders as tfrs
 from typing import Dict, Text, Tuple, List, Optional
 import logging
 from dataclasses import dataclass
@@ -260,7 +259,7 @@ class TwoTowerRetrieverModel(tfrs.models.Model):
         
         # Retrieval task with factorized top-k for efficient evaluation
         self.task = tfrs.tasks.Retrieval(
-            metrics=tfrs.metrics.FactorizedTopK(k=50)
+            metrics=tfrs.metrics.FactorizedTopK(candidates=None)
         )
         
         # --- PATCH A: Config for explicit negatives & logging ---
@@ -269,7 +268,7 @@ class TwoTowerRetrieverModel(tfrs.models.Model):
         
         # Lightweight training-step logging
         self.log_every_n_steps = 100
-        self.train_step = 0
+        self.train_step_counter = 0
         self.pos_dot_ema = 0.0
         self.neg_dot_ema = 0.0
         self.ema_beta = 0.9
@@ -361,15 +360,15 @@ class TwoTowerRetrieverModel(tfrs.models.Model):
                 self.pos_dot_ema = self.ema_beta * self.pos_dot_ema + (1.0 - self.ema_beta) * pm
                 self.neg_dot_ema = self.ema_beta * self.neg_dot_ema + (1.0 - self.ema_beta) * nm
                 self.loss_ema = self.ema_beta * self.loss_ema + (1.0 - self.ema_beta) * lm
-                self.train_step += 1
+                self.train_step_counter += 1
                 
                 # Log every N steps
-                if self.train_step % self.log_every_n_steps == 0:
+                if self.train_step_counter % self.log_every_n_steps == 0:
                     margin = pm - nm
                     
                     # Console logging
                     logger.info(
-                        f"[Retriever] step={self.train_step:05d} | "
+                        f"[Retriever] step={self.train_step_counter:05d} | "
                         f"loss={lm:.4f} (ema: {self.loss_ema:.4f}) | "
                         f"pos_dot={pm:.4f} (ema: {self.pos_dot_ema:.4f}) | "
                         f"neg_dot={nm:.4f} (ema: {self.neg_dot_ema:.4f}) | "
@@ -378,13 +377,13 @@ class TwoTowerRetrieverModel(tfrs.models.Model):
                     
                     # TensorBoard logging using tf.summary
                     with tf.summary.create_file_writer(self.log_dir).as_default():
-                        tf.summary.scalar('loss/contrastive', lm, step=self.train_step)
-                        tf.summary.scalar('loss/ema', self.loss_ema, step=self.train_step)
-                        tf.summary.scalar('embeddings/pos_dot_mean', pm, step=self.train_step)
-                        tf.summary.scalar('embeddings/neg_dot_mean', nm, step=self.train_step)
-                        tf.summary.scalar('embeddings/pos_dot_ema', self.pos_dot_ema, step=self.train_step)
-                        tf.summary.scalar('embeddings/neg_dot_ema', self.neg_dot_ema, step=self.train_step)
-                        tf.summary.scalar('embeddings/margin', margin, step=self.train_step)
+                        tf.summary.scalar('loss/contrastive', lm, step=self.train_step_counter)
+                        tf.summary.scalar('loss/ema', self.loss_ema, step=self.train_step_counter)
+                        tf.summary.scalar('embeddings/pos_dot_mean', pm, step=self.train_step_counter)
+                        tf.summary.scalar('embeddings/neg_dot_mean', nm, step=self.train_step_counter)
+                        tf.summary.scalar('embeddings/pos_dot_ema', self.pos_dot_ema, step=self.train_step_counter)
+                        tf.summary.scalar('embeddings/neg_dot_ema', self.neg_dot_ema, step=self.train_step_counter)
+                        tf.summary.scalar('embeddings/margin', margin, step=self.train_step_counter)
                         
             except Exception as e:
                 # Graph mode or other contexts where .numpy() unavailable
