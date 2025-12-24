@@ -1,0 +1,15 @@
+name: tf-recs-env
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - tensorflow          # or 'tensorflow-macos' on Apple Silicon via conda-forge
+  - pip
+  - pip:
+      - tensorflow-recommenders
+      # if you really meant this exact name and it exists only on PyPI:
+      # - tensorflow-recommendersftk
