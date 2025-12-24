@@ -163,15 +163,15 @@ class UserTower(keras.Model):
             name="user_embedding"
         )
         
-        self.dense_1 = layers.Dense(128, activation='relu', name="user_dense_1")
+        self.dense_1 = None
         self.batch_norm_1 = layers.BatchNormalization()
         self.dropout_1 = layers.Dropout(0.2)
         
-        self.dense_2 = layers.Dense(64, activation='relu', name="user_dense_2")
+        self.dense_2 = None
         self.batch_norm_2 = layers.BatchNormalization()
         self.dropout_2 = layers.Dropout(0.2)
         
-        self.output_layer = layers.Dense(embedding_dim, name="user_output")
+        self.output_layer = None
     
     def call(self, user_features: Dict[Text, tf.Tensor], training=False):
         user_id = user_features['user_id']
@@ -180,7 +180,15 @@ class UserTower(keras.Model):
         if 'user_numerical_features' in user_features:
             user_features_numerical = user_features['user_numerical_features']
             x = tf.concat([x, user_features_numerical], axis=-1)
-        
+
+        # Build dense layers lazily based on actual input dim
+        if self.dense_1 is None:
+            self.dense_1 = layers.Dense(128, activation="relu", name="user_dense_1")
+        if self.dense_2 is None:
+            self.dense_2 = layers.Dense(64, activation="relu", name="user_dense_2")
+        if self.output_layer is None:
+            self.output_layer = layers.Dense(self.embedding_dim, name="user_output")
+
         x = self.dense_1(x)
         x = self.batch_norm_1(x, training=training)
         x = self.dropout_1(x, training=training)
@@ -208,15 +216,15 @@ class ItemTower(keras.Model):
             name="item_embedding"
         )
         
-        self.dense_1 = layers.Dense(128, activation='relu', name="item_dense_1")
+        self.dense_1 = None
         self.batch_norm_1 = layers.BatchNormalization()
         self.dropout_1 = layers.Dropout(0.2)
         
-        self.dense_2 = layers.Dense(64, activation='relu', name="item_dense_2")
+        self.dense_2 = None
         self.batch_norm_2 = layers.BatchNormalization()
         self.dropout_2 = layers.Dropout(0.2)
         
-        self.output_layer = layers.Dense(embedding_dim, name="item_output")
+        self.output_layer = None
     
     def call(self, item_features: Dict[Text, tf.Tensor], training=False):
         item_id = item_features['item_id']
@@ -225,7 +233,15 @@ class ItemTower(keras.Model):
         if 'item_categorical_features' in item_features:
             item_features_cat = item_features['item_categorical_features']
             x = tf.concat([x, item_features_cat], axis=-1)
-        
+
+        # Build dense layers lazily based on actual x.shape[-1]
+        if self.dense_1 is None:
+            self.dense_1 = layers.Dense(128, activation='relu', name="item_dense_1")
+        if self.dense_2 is None:
+            self.dense_2 = layers.Dense(64, activation='relu', name="item_dense_2")
+        if self.output_layer is None:
+            self.output_layer = layers.Dense(self.embedding_dim, name="item_output")
+
         x = self.dense_1(x)
         x = self.batch_norm_1(x, training=training)
         x = self.dropout_1(x, training=training)
@@ -275,7 +291,7 @@ class TwoTowerRetrieverModel(tfrs.models.Model):
         self.loss_ema = 0.0
         
         # TensorBoard writer
-        self.log_dir = log_dir or "logs/retriever"
+        self.log_dir = log_dir or "logs/two_tower"
         self.writer = None
         if self.log_dir:
             os.makedirs(self.log_dir, exist_ok=True)
@@ -316,11 +332,27 @@ class TwoTowerRetrieverModel(tfrs.models.Model):
 
             # Embed all negatives: flatten -> embed -> reshape
             neg_item_ids_flat = tf.reshape(neg_item_ids, [-1])  # [B * num_neg]
+
+            # Reuse the same categorical feature distribution as positives for shape consistency
+            batch_size = tf.shape(pos_item_ids)[0]
+            pos_item_cats = features['item_features'].get('item_categorical_features', None)
+            if pos_item_cats is not None:
+                # pos_item_cats: [B, 16] -> tile to [B * num_neg, 16]
+                neg_item_cats_flat = tf.tile(
+                    pos_item_cats, multiples=[self.num_neg, 1]
+                )
+                neg_item_features = {
+                    'item_id': neg_item_ids_flat,
+                    'item_categorical_features': neg_item_cats_flat,
+                }
+            else:
+                neg_item_features = {'item_id': neg_item_ids_flat}
+
             neg_item_embeddings_flat = self.item_tower(
-                {'item_id': neg_item_ids_flat}, 
+                neg_item_features,
                 training=training
             )  # [B * num_neg, D]
-            
+
             # Reshape back to [B, num_neg, D]
             batch_size = tf.shape(pos_item_ids)[0]
             neg_item_embeddings = tf.reshape(
@@ -816,7 +848,7 @@ def train_two_tower_system(log_dir: str = "logs/two_tower"):
         user_tower, 
         item_tower, 
         negative_sampler,
-        log_dir=os.path.join(log_dir, "retriever")
+        log_dir=log_dir
     )
     retriever.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001))
     
@@ -824,7 +856,7 @@ def train_two_tower_system(log_dir: str = "logs/two_tower"):
     
     # ====== TensorBoard callback ======
     tb_callback = keras.callbacks.TensorBoard(
-        log_dir=os.path.join(log_dir, "retriever"),
+        log_dir=log_dir,
         update_freq="batch",
         histogram_freq=0
     )
@@ -849,7 +881,7 @@ def train_two_tower_system(log_dir: str = "logs/two_tower"):
     )
     
     tb_callback_ranker = keras.callbacks.TensorBoard(
-        log_dir=os.path.join(log_dir, "ranker"),
+        log_dir=log_dir,
         update_freq="batch"
     )
     

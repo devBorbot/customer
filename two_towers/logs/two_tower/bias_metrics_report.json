@@ -1,0 +1,13 @@
+{
+  "history": [
+    {
+      "timestamp": "2025-12-23T21:57:51.022198",
+      "coverage": 0.1068,
+      "popularity_bias": -0.03597241459990367,
+      "gini_coefficient": 0.35944194756554326,
+      "long_tail_coverage": 0.11099999999889
+    }
+  ],
+  "total_recommendations": 1000,
+  "unique_items_recommended": 534
+}
