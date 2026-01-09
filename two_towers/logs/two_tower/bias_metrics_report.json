@@ -1,13 +1,13 @@
 {
   "history": [
     {
-      "timestamp": "2025-12-23T21:57:51.022198",
-      "coverage": 0.1068,
-      "popularity_bias": -0.03597241459990367,
-      "gini_coefficient": 0.35944194756554326,
-      "long_tail_coverage": 0.11099999999889
+      "timestamp": "2026-01-09T15:46:52.842634",
+      "coverage": 0.1244,
+      "popularity_bias": 0.13353376738004977,
+      "gini_coefficient": 0.28883279742765255,
+      "long_tail_coverage": 0.05099999999949
     }
   ],
   "total_recommendations": 1000,
-  "unique_items_recommended": 534
+  "unique_items_recommended": 622
 }
